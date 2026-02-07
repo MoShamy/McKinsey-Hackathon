@@ -28,7 +28,7 @@ def analyst_node(state: AgentState):
     Analyze the User Goal and Data.
     1. Identify the Core Strategy.
     2. GAPS: What is missing?
-    3. RECOMMENDATION: Propose a clear narrative arc.
+    3. RECOMMENDATION: Propose a clear narrative arc, targeting executive audience.
     Context: {combined_input}
     Feedback: {feedback}
     """
@@ -50,6 +50,8 @@ def story_node(state: AgentState):
     
     TASK 1: Create a 3-slide plan.
     TASK 2: Act as a CREATIVE DIRECTOR. Choose a font style.
+    TASK 3: A
+
     
     CRITICAL: Output ONLY VALID JSON.
     Structure:
@@ -65,7 +67,7 @@ def story_node(state: AgentState):
     }}
     """
     response = llm.invoke([
-        SystemMessage(content="You are a Presentation Expert. Output ONLY JSON."),
+        SystemMessage(content="You are a Presentation Expert, specialising in producing PowerPoint presentations that follow clear narratives and story-lines, targeting executive audiences. Output ONLY JSON."),
         HumanMessage(content=prompt)
     ])
     

@@ -3,6 +3,8 @@ from agent_logic import app
 from create_ppt import generate_pptx
 
 # 1. SETUP INPUTS
+
+# These r default inputs for the agent (testing)
 user_chat = "I need a deck for the Board explaining why we missed Q3 targets."
 file_content = """
 Metrics:
