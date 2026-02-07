@@ -1,0 +1,32 @@
+SUPPLY CHAIN COST REDUCTION – INITIATIVE DRAFT (Board-ready draft 1)
+
+Executive summary (for deck)
+We are executing a structured cost reduction initiative across freight, warehousing, sourcing, and inventory. Target: $12–18M annualised savings by end of FY25, with clear ownership and milestones. This document is the basis for the Board deck – narrative and numbers to be aligned with Finance.
+
+Pillars
+
+1) Freight
+- Renegotiate ocean and air contracts. RFP in progress; target 10–15% reduction on primary lanes. Lock 2-year where possible. Owner: Logistics. Timeline: contracts signed by Q3.
+- Mode shift: shift some volume from air to ocean where lead time allows. Estimate 8% of air volume movable. Saves ~$2M annually. Owner: Planning + Logistics.
+
+2) Warehousing & distribution
+- Consolidate 2 EU DCs into 1 with current 3PL. Pilot in progress. Full rollout by Q4. Estimated savings $1.5–2M run-rate. Owner: Ops.
+- US: evaluate same play for East Coast. Decision by mid-year. Potential additional $1–2M.
+
+3) Sourcing & procurement
+- Dual-source top 5 components (by spend). Asia + Mexico. Improves resilience and negotiation position. Target 5–8% savings on those categories. Owner: Procurement. Timeline: second source qualified by Q2 for 3 of 5.
+- Packaging: standardise and reduce SKU count. Project with Product. $0.5–1M.
+
+4) Inventory
+- Reduce safety stock via better forecasting. New planning tool rollout in Q2. Target: 10% reduction in inventory value over 18 months. Frees cash and cuts carrying cost. Owner: Supply chain planning.
+- Write-down / rationalisation: clear slow-moving and obsolete. One-time hit in P&L, ongoing benefit. Already started; complete by Q3.
+
+Financial summary (illustrative – align with Finance)
+- Total annualised savings (run-rate by end FY25): $12–18M. Midpoint $15M.
+- Phasing: ~$3–4M in FY24 (H2), remainder in FY25.
+- One-time costs: capex and restructuring ~$2–3M. Payback under 12 months.
+- Risks: carrier/3PL negotiations, execution on consolidation. Mitigation: fallback options per pillar; monthly steering with Finance.
+
+Governance
+- Steering committee: COO, CFO, VP Supply Chain. Monthly. Escalate to CEO if behind plan.
+- Board updates: this deck at next meeting; then quarterly progress vs targets.

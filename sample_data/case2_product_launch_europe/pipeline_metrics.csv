@@ -1,0 +1,9 @@
+region,metric,unit,q1_actual,q2_target,q2_stretch,notes
+UK,pipeline_qualified,EUR,620000,900000,1100000,enterprise + mid-market
+DACH,pipeline_qualified,EUR,480000,800000,950000,longer cycles
+France,pipeline_qualified,EUR,280000,500000,600000,entity delay risk
+UK,new_logos,count,2,5,6,target 3 references
+DACH,new_logos,count,1,4,5,1 marquee desired
+France,new_logos,count,0,3,4,ramp from zero
+Europe_total,ARR_target,EUR,0,400000,500000,stretch in plan
+Europe_total,event_attendees,count,0,350,400,London Munich Paris + webinars

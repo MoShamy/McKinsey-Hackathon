@@ -1,0 +1,20 @@
+EUROPE LAUNCH – RAW NOTES (from product + sales, not consolidated)
+
+UK / DACH / France = first wave. Benelux and Nordics maybe Q3.
+- UK: enterprise still slow on new vendor decisions, mid-market more active. Key accounts we’re chasing: list in pipeline doc.
+- DACH: compliance and data residency huge. Need clear “data in EU” story. Germany especially price-sensitive, long cycles.
+- France: some big public-sector opportunities but procurement is a nightmare. Commercial segment better for quick wins.
+
+Competitive stuff we’ve heard:
+- Competitor A undercutting in UK. Competitor B strong in DACH with existing install base. We’re winning on integration and support, losing on price-only deals.
+- Need to nail “why switch now” and land-and-expand playbook. ACV in Europe 15–20% lower than US so far (mix and discounting).
+
+Launch plan so far:
+- London event (invite-only, C-level). Then Munich, Paris. Webinars for broader audience. PR push in The Register, local tech press.
+- Pricing: EUR list = USD × 1.1 (round numbers). Local payment, contracts in local entity where we have one. Still sorting out France entity.
+
+Risks / open items:
+- Pipeline not yet where we want for Q2 commit. Marketing pushing hard. Sales want more SDR support and better lead quality.
+- One big deal (UK) slipped to Q3 – need to explain in exec update. Churn in UK mid-market slightly up (competitor pressure).
+
+Success = pipeline coverage, event attendance, and at least 3 reference customers in each of UK, DACH, France by end Q2. Finance will want revenue bridge vs plan.

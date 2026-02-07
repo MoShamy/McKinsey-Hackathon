@@ -1,0 +1,11 @@
+country,city,metric,unit,2024_value,2027_projection,notes
+Saudi Arabia,Riyadh,average_residential_price,USD_per_sqm,2100,2400,mid to upper-mid segment
+Saudi Arabia,Jeddah,average_residential_price,USD_per_sqm,1900,2150,secondary KSA city
+United Arab Emirates,Dubai,average_residential_price,USD_per_sqm,3200,3600,excl ultra-prime
+United Arab Emirates,Abu Dhabi,average_residential_price,USD_per_sqm,3000,3350,strong institutional demand
+Saudi Arabia,Riyadh,annual_residential_transactions,units,48000,55000,estimated
+United Arab Emirates,Dubai,annual_residential_transactions,units,85000,92000,liquid off-plan market
+Saudi Arabia,Riyadh,homeownership_rate,percent,60,68,govt target ~70%
+United Arab Emirates,Dubai,expat_population_share,percent,85,86,drives demand
+Saudi Arabia,Riyadh,gross_margin_target,percent,27,27,project-level
+United Arab Emirates,Dubai,gross_margin_target,percent,28,28,project-level

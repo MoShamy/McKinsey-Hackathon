@@ -1,0 +1,18 @@
+SUPPLY CHAIN COST – OPS NOTES (from site visits + finance, unpolished)
+
+Current pain:
+- Freight costs up 40% vs pre-COVID baseline. Ocean and air both. Some lanes 2–3x. We renegotiated a few contracts but not enough.
+- Warehousing: 3PL rate increases 15–25% in key hubs (US East, EU). Labour and real estate. We’re locked in some locations until end of year, then we can consolidate.
+- Raw materials: still volatile. Steel, packaging, certain chemicals. We’re hedging where we can but not everything is hedgeable.
+- Inventory: carrying cost up because we over-ordered in 2022–23 to avoid stockouts. Now we’re sitting on slow-moving SKUs. Write-downs in Q1.
+
+What we’ve done so far:
+- RFP for primary ocean lanes. Expect 10–15% savings if we lock 2-year with one carrier. Decision in 60 days.
+- Warehouse: pilot with one 3PL to consolidate 2 facilities into 1 in EU. If it works, roll out. Potential 20% cut in that region’s DC cost.
+- Sourcing: dual-sourcing for top 5 components. One supplier in Asia, one in Mexico. Adds complexity but reduces single-point risk and gives us leverage.
+- Demand planning: new tool going in. Should improve forecast accuracy and let us trim safety stock over 12–18 months.
+
+Board will ask:
+- Total $ impact and when it lands. We’re saying $12–18M annual run-rate by end of FY25, with most in H2. Need to show bridge.
+- Risk: what if we don’t hit? Contingencies (more aggressive consolidation, further SKU rationalisation).
+- Capex: any upfront spend for the consolidation and tooling. Finance has a number – need to align with this deck.
