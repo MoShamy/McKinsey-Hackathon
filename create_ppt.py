@@ -14,14 +14,19 @@ def generate_pptx(json_data, filename="Strategy_Deck.pptx"):
         
         # 1. Set Title
         title = slide.shapes.title
-        title.text = slide_info.get("title", "Untitled Slide")
+        if title is not None:
+            title.text = slide_info.get("title", "Untitled Slide")
         
         # 2. Add Bullet Points
-        if slide.placeholders.placeholders:
-            body_shape = slide.placeholders[1]
+        body_shape = None
+        for placeholder in slide.placeholders:
+            if placeholder.placeholder_format.idx == 1:
+                body_shape = placeholder
+                break
+        if body_shape is not None:
             tf = body_shape.text_frame
-            tf.text = "" # clear default text
-            
+            tf.text = ""  # clear default text
+
             for point in slide_info.get("bullets", []):
                 p = tf.add_paragraph()
                 p.text = point
