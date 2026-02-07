@@ -46,7 +46,7 @@ st.markdown("""
     .block-container { 
         padding-top: 2rem; 
         padding-bottom: 3rem; 
-        max-width: 1200px; 
+        max-width: 1400px; 
     }
 
     /* HEADER */
@@ -133,7 +133,6 @@ st.markdown("""
     .workflow-step.active.input { background: var(--slate-light); color: var(--navy); border-color: #cbd5e1; }
     .workflow-step.active.analyst { background: var(--blue-bg); color: var(--blue); border-color: var(--blue); }
     
-    /* Both reviews use Amber */
     .workflow-step.active.human_review { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
     .workflow-step.active.critique { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
     
@@ -163,7 +162,7 @@ st.markdown("""
     }
     .empty-state strong { color: var(--navy); }
 
-    /* DIRECT FORM STYLING (Fixes the white bar issue) */
+    /* DIRECT FORM STYLING */
     [data-testid="stForm"] {
         background-color: white;
         border: 1px solid #e2e8f0;
@@ -180,6 +179,29 @@ st.markdown("""
         margin-bottom: 1rem;
         font-size: 0.9rem;
         color: var(--navy);
+    }
+
+    /* SLIDE CARD STYLING */
+    .slide-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .slide-title {
+        color: var(--navy);
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+    }
+    .slide-notes {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px dashed #e2e8f0;
+        font-size: 0.85rem;
+        color: var(--slate);
+        font-style: italic;
     }
 
     /* Hiding Streamlit details */
@@ -205,6 +227,9 @@ def init_session_state():
         st.session_state.clear_feedback = False
     if "pending_agent_run" not in st.session_state:
         st.session_state.pending_agent_run = None
+    # Track the template file across reruns
+    if "template_file" not in st.session_state:
+        st.session_state.template_file = None
 
 
 def append_chat(role, content):
@@ -250,14 +275,11 @@ def read_uploaded_file(uploaded_file):
 
 
 def render_workflow_stepper(snapshot, next_step, pending_agent_run=None):
-    """
-    Renders the stepper. Only the active step has color; others are grey.
-    """
     steps = [
         ("Input", "input"),
         ("Analyst", "analyst"),
         ("Review Strategy", "human_review"),
-        ("Slides", "story_architect"),
+        ("Storyteller", "story_architect"),
         ("Review Slides", "critique"),
         ("Export", "done"),
     ]
@@ -341,70 +363,72 @@ if pending_for_stepper:
     st.rerun()
 
 # ---- 4. Main Layout ----
-left, right = st.columns([3, 2], gap="large")
+left, right = st.columns([2, 3], gap="large")
 
 # ========== LEFT COLUMN: Input + Feedback ==========
 with left:
-    # Removed the markdown wrapper div here that caused the white bar.
-    # The form is now styled directly via CSS [data-testid="stForm"].
+    workflow_active = (snapshot is not None) or (pending_for_stepper is not None)
+
+    # 1. Input Form (Visible only at start)
+    if not workflow_active:
+        with st.form("input_form"):
+            user_request = st.text_input(
+                "User goal — What deck do you need?",
+                value="I need a deck for the Board on our proposed GCC residential expansion.",
+                placeholder="e.g. Update the board on Q3 financials...",
+            )
+            uploaded_files = st.file_uploader(
+                "Source files — Drop reports, data, emails here",
+                type=["pdf", "csv", "xlsx", "xls", "txt", "md"],
+                accept_multiple_files=True,
+            )
+            additional_notes = st.text_area(
+                "Additional notes (optional)",
+                value="",
+                height=100,
+                placeholder="Context, constraints, or specific tone requirements...",
+            )
+            
+            st.write("") # Spacer
+            
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                submitted = st.form_submit_button("Start Analysis", type="primary", use_container_width=True)
+
+        if submitted:
+            combined_sections = []
+            if uploaded_files:
+                for uploaded_file in uploaded_files:
+                    try:
+                        content = read_uploaded_file(uploaded_file)
+                    except Exception as exc:
+                        content = f"Failed to read file: {exc}"
+                    combined_sections.append(
+                        f"FILE: {uploaded_file.name}\n{truncate_text(content)}"
+                    )
+            if additional_notes.strip():
+                combined_sections.append(f"NOTES:\n{additional_notes.strip()}")
+            if not combined_sections:
+                combined_sections.append("No files or notes were provided.")
+
+            raw_files_content = "\n\n".join(combined_sections)
+            st.session_state.inputs = {
+                "user_request": user_request,
+                "raw_files_content": raw_files_content,
+            }
+            append_chat("user", user_request)
+            st.session_state.pending_agent_run = "analyst"
+            st.rerun()
     
-    with st.form("input_form"):
-        user_request = st.text_input(
-            "User goal — What deck do you need?",
-            value="I need a deck for the Board on our proposed GCC residential expansion.",
-            placeholder="e.g. Update the board on Q3 financials...",
-        )
-        uploaded_files = st.file_uploader(
-            "Source files — Drop reports, data, emails here",
-            type=["pdf", "csv", "xlsx", "xls", "txt", "md"],
-            accept_multiple_files=True,
-        )
-        additional_notes = st.text_area(
-            "Additional notes (optional)",
-            value="",
-            height=100,
-            placeholder="Context, constraints, or specific tone requirements...",
-        )
-        
-        st.write("") # Spacer
-        
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            submitted = st.form_submit_button("Start Analysis", type="primary", use_container_width=True)
+    else:
+        st.info("Input received. Workflow in progress.")
 
-    if submitted:
-        combined_sections = []
-        if uploaded_files:
-            for uploaded_file in uploaded_files:
-                try:
-                    content = read_uploaded_file(uploaded_file)
-                except Exception as exc:
-                    content = f"Failed to read file: {exc}"
-                combined_sections.append(
-                    f"FILE: {uploaded_file.name}\n{truncate_text(content)}"
-                )
-        if additional_notes.strip():
-            combined_sections.append(f"NOTES:\n{additional_notes.strip()}")
-        if not combined_sections:
-            combined_sections.append("No files or notes were provided.")
-
-        raw_files_content = "\n\n".join(combined_sections)
-        st.session_state.inputs = {
-            "user_request": user_request,
-            "raw_files_content": raw_files_content,
-        }
-        append_chat("user", user_request)
-        st.session_state.pending_agent_run = "analyst"
-        st.rerun()
-
-    # ---- Feedback Section ----
+    # 2. Feedback Section (Active during interrupts)
     if snapshot and next_step and next_step in ("human_review", "critique"):
         if st.session_state.clear_feedback:
             st.session_state.feedback_text = ""
             st.session_state.clear_feedback = False
 
-        st.markdown("---")
-        
         if next_step == "human_review":
             st.markdown(
                 '<div class="feedback-cta"><strong>Review Strategy</strong><br/>'
@@ -412,11 +436,20 @@ with left:
                 unsafe_allow_html=True,
             )
         else:
+            # --- REVIEW SLIDES SECTION ---
             st.markdown(
                 '<div class="feedback-cta"><strong>Review Slides</strong><br/>'
                 'Check the slides on the right. If you want changes, the Critique agent will verify them.</div>',
                 unsafe_allow_html=True,
             )
+            
+            # [ADDED FEATURE] Template Uploader in Review Phase
+            with st.expander("Design Settings (Optional)"):
+                uploaded_tmpl = st.file_uploader("Upload Company Template (.pptx)", type=["pptx"])
+                if uploaded_tmpl:
+                    st.session_state.template_file = uploaded_tmpl
+                    st.success(f"Loaded: {uploaded_tmpl.name}")
+                    st.caption("This template will be applied when you export the deck.")
 
         feedback = st.text_area(
             "Your feedback",
@@ -436,25 +469,30 @@ with left:
             st.session_state.pending_agent_run = "story_architect"
             st.rerun()
 
-    # ---- Export Section ----
+    # 3. Export Section (Active when done)
     if snapshot and not snapshot.next:
-        st.markdown("---")
         st.markdown('<div class="feedback-cta"><strong>Workflow Complete</strong></div>', unsafe_allow_html=True)
         
         col_dl, col_reset = st.columns([1, 1])
         with col_dl:
-            # 1. Generate Button
             if st.button("Generate PowerPoint", type="primary", use_container_width=True):
                 narrative_plan = snapshot.values.get("narrative_plan", {})
                 
-                # FIX: Call function without 'filename'. It returns a memory stream.
-                pptx_stream = generate_pptx(narrative_plan) 
+                # Retrieve the template from session state (if uploaded)
+                tmpl_file = st.session_state.get("template_file")
                 
-                # Store the bytes in session state
-                st.session_state.pptx_bytes = pptx_stream.getvalue()
-                st.rerun()
+                # Pass template to generation (handles template_file logic)
+                try:
+                    pptx_stream = generate_pptx(narrative_plan, template_file=tmpl_file)
+                    st.session_state.pptx_bytes = pptx_stream.getvalue()
+                    st.rerun()
+                except TypeError:
+                    # Fallback if generate_pptx doesn't support template_file yet
+                    st.warning("Note: Template feature requires updated 'create_ppt.py'. Generating with default layout...")
+                    pptx_stream = generate_pptx(narrative_plan)
+                    st.session_state.pptx_bytes = pptx_stream.getvalue()
+                    st.rerun()
                 
-            # 2. Download Button (Only appears after generation)
             if st.session_state.pptx_bytes:
                 st.download_button(
                     label="Download Final_Deck.pptx",
@@ -464,6 +502,11 @@ with left:
                     type="secondary",
                     use_container_width=True
                 )
+        
+        with col_reset:
+            if st.button("Start New Deck", type="secondary", use_container_width=True):
+                 st.session_state.clear()
+                 st.rerun()
                 
 # ========== RIGHT COLUMN: Agent Outputs ==========
 with right:
@@ -494,9 +537,31 @@ with right:
                 st.info("Waiting for Analyst...")
 
         # 2. Slide Plan
-        with st.expander("Slide Plan (JSON)", expanded=(current_step == "critique" or current_step == "done")):
+        with st.expander("Slide Plan", expanded=(current_step == "critique" or current_step == "done")):
             if narrative_plan:
-                st.code(json.dumps(narrative_plan, indent=2), language="json")
+                slides = narrative_plan.get("slides", [])
+                if not slides:
+                    st.warning("No slides found in the plan.")
+                else:
+                    for i, slide in enumerate(slides):
+                        title = slide.get("title", "Untitled Slide")
+                        bullets = slide.get("bullets", [])
+                        notes = slide.get("speaker_notes", "No notes.")
+                        
+                        st.markdown(f"""
+                        <div class="slide-card">
+                            <div class="slide-title">Slide {i+1}: {title}</div>
+                            <ul>
+                        """, unsafe_allow_html=True)
+                        
+                        for b in bullets:
+                            st.markdown(f"<li>{b}</li>", unsafe_allow_html=True)
+                            
+                        st.markdown(f"""
+                            </ul>
+                            <div class="slide-notes"><strong>Speaker Notes:</strong> {notes}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
             else:
                 st.info("Waiting for Story Architect...")
 
