@@ -22,6 +22,10 @@ def init_session_state():
         st.session_state.inputs = None
     if "pptx_bytes" not in st.session_state:
         st.session_state.pptx_bytes = None
+    if "feedback_text" not in st.session_state:
+        st.session_state.feedback_text = ""
+    if "clear_feedback" not in st.session_state:
+        st.session_state.clear_feedback = False
 
 
 def append_chat(role, content):
@@ -130,6 +134,9 @@ with left:
         next_step = snapshot.next[0]
 
     if snapshot and next_step:
+        if st.session_state.clear_feedback:
+            st.session_state.feedback_text = ""
+            st.session_state.clear_feedback = False
         if next_step == "human_review":
             st.subheader("Review Analyst Report")
             st.caption("Add feedback to revise the analysis, or approve to proceed to slide creation.")
@@ -139,7 +146,11 @@ with left:
         else:
             st.subheader("Continue")
         
-        feedback = st.text_area("Feedback", placeholder="Press Continue to approve, or type changes.")
+        feedback = st.text_area(
+            "Feedback",
+            placeholder="Press Continue to approve, or type changes.",
+            key="feedback_text",
+        )
         if st.button("Continue workflow"):
             if feedback.strip() == "":
                 feedback = "Proceed with this strategy."
@@ -148,6 +159,7 @@ with left:
                 {"human_feedback": feedback},
             )
             append_chat("assistant", f"Feedback recorded: {feedback}")
+            st.session_state.clear_feedback = True
             run_until_pause(None)
             st.rerun()
 
