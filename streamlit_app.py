@@ -3,7 +3,9 @@ import os
 from io import BytesIO
 from uuid import uuid4
 
+import pandas as pd
 import streamlit as st
+from pypdf import PdfReader
 
 from agent_logic import app
 from create_ppt import generate_pptx
@@ -34,6 +36,36 @@ def run_until_pause(inputs=None):
     st.session_state.snapshot = app.get_state(config)
 
 
+def truncate_text(text, limit=12000):
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n\n[TRUNCATED]"
+
+
+def read_uploaded_file(uploaded_file):
+    name = uploaded_file.name
+    suffix = os.path.splitext(name)[1].lower()
+    data = uploaded_file.getvalue()
+    
+    if suffix == ".pdf":
+        reader = PdfReader(BytesIO(data))
+        pages = [page.extract_text() or "" for page in reader.pages]
+        return "\n".join(pages)
+    
+    if suffix in {".csv"}:
+        df = pd.read_csv(BytesIO(data))
+        return df.to_csv(index=False)
+    
+    if suffix in {".xlsx", ".xls"}:
+        df = pd.read_excel(BytesIO(data))
+        return df.to_csv(index=False)
+    
+    if suffix in {".txt", ".md"}:
+        return data.decode("utf-8", errors="ignore")
+    
+    return f"Unsupported file type: {suffix}"
+
+
 st.set_page_config(page_title="Executive Storytelling Copilot", layout="wide")
 init_session_state()
 
@@ -54,20 +86,35 @@ with left:
             "User goal",
             value="I need a deck for the Board explaining why we missed Q3 targets.",
         )
-        raw_files_content = st.text_area(
-            "Paste source content",
-            value=(
-                "Metrics:\n"
-                "Q3 Target: $10M | Q3 Actual: $8M\n"
-                "churn_rate: 15% (Target 5%)\n"
-                "Marketing Spend: $2M (On budget)\n"
-                "Competitor Activity: High aggressive pricing in July."
-            ),
-            height=160,
+        uploaded_files = st.file_uploader(
+            "Upload source files",
+            type=["pdf", "csv", "xlsx", "xls", "txt", "md"],
+            accept_multiple_files=True,
+        )
+        additional_notes = st.text_area(
+            "Additional notes (optional)",
+            value="",
+            height=120,
         )
         submitted = st.form_submit_button("Start analysis")
 
     if submitted:
+        combined_sections = []
+        if uploaded_files:
+            for uploaded_file in uploaded_files:
+                try:
+                    content = read_uploaded_file(uploaded_file)
+                except Exception as exc:
+                    content = f"Failed to read file: {exc}"
+                combined_sections.append(
+                    f"FILE: {uploaded_file.name}\n{truncate_text(content)}"
+                )
+        if additional_notes.strip():
+            combined_sections.append(f"NOTES:\n{additional_notes.strip()}")
+        if not combined_sections:
+            combined_sections.append("No files or notes were provided.")
+
+        raw_files_content = "\n\n".join(combined_sections)
         st.session_state.inputs = {
             "user_request": user_request,
             "raw_files_content": raw_files_content,
