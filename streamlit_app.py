@@ -443,23 +443,28 @@ with left:
         
         col_dl, col_reset = st.columns([1, 1])
         with col_dl:
+            # 1. Generate Button
             if st.button("Generate PowerPoint", type="primary", use_container_width=True):
                 narrative_plan = snapshot.values.get("narrative_plan", {})
-                generate_pptx(narrative_plan, filename="Final_Deck.pptx")
-                with open("Final_Deck.pptx", "rb") as handle:
-                    st.session_state.pptx_bytes = handle.read()
+                
+                # FIX: Call function without 'filename'. It returns a memory stream.
+                pptx_stream = generate_pptx(narrative_plan) 
+                
+                # Store the bytes in session state
+                st.session_state.pptx_bytes = pptx_stream.getvalue()
                 st.rerun()
                 
+            # 2. Download Button (Only appears after generation)
             if st.session_state.pptx_bytes:
                 st.download_button(
-                    "Download Final_Deck.pptx",
+                    label="Download Final_Deck.pptx",
                     data=st.session_state.pptx_bytes,
                     file_name="Final_Deck.pptx",
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     type="secondary",
                     use_container_width=True
                 )
-
+                
 # ========== RIGHT COLUMN: Agent Outputs ==========
 with right:
     st.markdown('<div class="section-label">Agent Intelligence</div>', unsafe_allow_html=True)
