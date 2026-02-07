@@ -1,93 +1,64 @@
 import os
 import json
 from dotenv import load_dotenv
-from typing import TypedDict, Optional
-
-# --- IMPORTS ---
+from typing import TypedDict, Optional, Literal
 from langchain_openai import ChatOpenAI 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-# 1. Load the Secret Key
 load_dotenv()
 
-# 2. Define the State
 class AgentState(TypedDict):
     raw_files_content: str
     user_request: str
     analysis_report: Optional[str]
     narrative_plan: Optional[dict]
     human_feedback: Optional[str]
-    next_step: Optional[str]
+    design_style: Optional[dict] 
 
-# --- SETUP MODEL (Kept exactly as you requested) ---
-llm = ChatOpenAI(
-    model="gpt-4", 
-    openai_api_key=os.getenv("OPENAI_API_KEY"),
-    openai_api_base=os.getenv("OPENAI_API_BASE"),
-    temperature=0
-)
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
-# --- NODE 1: THE ANALYST ---
+# --- 1. ANALYST NODE ---
 def analyst_node(state: AgentState):
-    print("\n--- [1] ANALYST WORKING ---")
     feedback = state.get('human_feedback', '')
-    
-    combined_input = f"""
-    USER GOAL: {state.get('user_request')}
-    AVAILABLE FILE DATA: {state.get('raw_files_content')}
-    """
-    
-    feedback_instruction = ""
-    if feedback and feedback != "Proceed with this strategy.":
-        feedback_instruction = f"\n\nIMPORTANT USER FEEDBACK TO INCORPORATE: {feedback}"
+    combined_input = f"USER GOAL: {state.get('user_request')}\nDATA: {state.get('raw_files_content')}"
     
     prompt = f"""
-    You are a Senior Strategy Consultant. Analyze the User Goal and File Data.
-    YOUR TASK:
+    Analyze the User Goal and Data.
     1. Identify the Core Strategy.
     2. GAPS: What is missing?
     3. RECOMMENDATION: Propose a clear narrative arc.
-    Data Context: {combined_input}
-    {feedback_instruction}
-    Keep it concise.
+    Context: {combined_input}
+    Feedback: {feedback}
     """
     response = llm.invoke([
         SystemMessage(content="You are a strategic advisor."),
         HumanMessage(content=prompt)
     ])
-    return {"analysis_report": response.content, "human_feedback": None}
+    return {"analysis_report": response.content}
 
-
-# --- NODE: HUMAN REVIEW (routing checkpoint) ---
-def human_review_node(state: AgentState):
-    """Passthrough node that allows the graph to pause for human feedback."""
-    print("\n--- [HUMAN REVIEW] Waiting for user input ---")
-    return {}
-
-
-def route_after_review(state: AgentState):
-    """Route based on human feedback: revise analyst or proceed to story architect."""
-    feedback = state.get('human_feedback', '')
-    if not feedback or feedback.strip() == "" or feedback == "Proceed with this strategy.":
-        return "story_architect"
-    # If there's substantive feedback at this stage, re-run analyst with the feedback
-    return "analyst"
-
-# --- NODE 2: THE STORY ARCHITECT ---
+# --- 2. STORY ARCHITECT NODE ---
 def story_node(state: AgentState):
-    print("\n--- [2] STORY ARCHITECT WORKING ---")
     feedback = state.get('human_feedback', "No feedback provided.")
+    print(f"--- ARCHITECT FEEDBACK RECEIVED: {feedback} ---") # Debug print
     
     prompt = f"""
-    Create a 3-slide presentation plan based on this report:
-    {state.get('analysis_report')}
+    Based on this report: {state.get('analysis_report')}
     
-    USER FEEDBACK TO ADDRESS: {feedback}
+    Current Feedback/Revision Request: "{feedback}"
     
-    CRITICAL: Return ONLY VALID JSON. Structure:
+    TASK 1: Create a 3-slide plan.
+    TASK 2: Act as a CREATIVE DIRECTOR. Choose a font style.
+    
+    CRITICAL: Output ONLY VALID JSON.
+    Structure:
     {{
+      "design": {{
+          "font_family": "Arial",
+          "title_color": "#Hex",
+          "accent_color": "#Hex"
+      }},
       "slides": [
          {{"title": "Title", "bullets": ["Pt1", "Pt2"], "speaker_notes": "Script"}}
       ]
@@ -98,7 +69,6 @@ def story_node(state: AgentState):
         HumanMessage(content=prompt)
     ])
     
-    # Cleaning Logic
     content = response.content
     if "```" in content:
         content = content.split("```")[1].replace("json", "").strip()
@@ -106,43 +76,29 @@ def story_node(state: AgentState):
     try:
         return {"narrative_plan": json.loads(content)}
     except:
-        return {"narrative_plan": {"slides": [{"title": "Error", "bullets": ["JSON Failed"], "speaker_notes": "Retry"}]}}
+        return {"narrative_plan": {"slides": [{"title": "Error", "bullets": ["JSON Error"], "speaker_notes": ""}]}}
 
-# --- NODE 3: THE STRICT CRITIQUE ---
-def critique_node(state: AgentState):
-    print("\n--- [3] CRITIQUE WORKING ---")
-    plan = state['narrative_plan']
-    feedback = state.get('human_feedback', "No feedback provided.")
+# --- ROUTING LOGIC ---
+def human_review_node(state: AgentState): return {}
+def critique_node(state: AgentState): return {}
 
-    # 1. FAIL SAFE
-    if not plan.get("slides") or plan["slides"][0]["title"] == "Error":
-         return {"next_step": "retry", "human_feedback": "JSON generation failed. Try again."}
+def route_after_review(state: AgentState):
+    feedback = state.get('human_feedback', '')
+    # If feedback is empty or generic approval, move forward
+    if not feedback or feedback == "Proceed with this strategy.":
+        return "story_architect"
+    # Otherwise, go back to fix strategy
+    return "analyst"
 
-    # 2. CHECK USER FEEDBACK (Strict Mode)
-    if feedback and feedback != "Proceed with this strategy.":
-        print(f"👀 VERIFYING FEEDBACK: '{feedback}'")
-        validation_prompt = f"""
-        User Feedback: "{feedback}"
-        Proposed Slides: {json.dumps(plan['slides'])}
-        
-        Did the slides COMPLETELY solve the user's complaint? 
-        If yes, say 'APPROVE'. 
-        If no, say 'REJECT'.
-        """
-        review = llm.invoke([
-            SystemMessage(content="You are a harsh Audit Officer."),
-            HumanMessage(content=validation_prompt)
-        ])
-        
-        if "REJECT" in review.content.upper():
-            print(f"❌ CRITIQUE REJECTED: The slides didn't fully address '{feedback}'.")
-            return {"next_step": "retry", "human_feedback": f"You failed to address: {feedback}. Be more specific."}
+def route_after_critique(state: AgentState):
+    feedback = state.get('human_feedback', '')
+    # If feedback is empty or generic approval, FINISH
+    if not feedback or feedback == "Proceed with this strategy.":
+        return END
+    # Otherwise, go back to fix slides
+    return "story_architect"
 
-    # 3. GENERAL QUALITY CHECK
-    print("✅ CRITIQUE APPROVED.")
-    return {"next_step": "proceed"}
-
-# --- BUILD WORKFLOW ---
+# --- GRAPH SETUP ---
 workflow = StateGraph(AgentState)
 workflow.add_node("analyst", analyst_node)
 workflow.add_node("human_review", human_review_node)
@@ -150,22 +106,13 @@ workflow.add_node("story_architect", story_node)
 workflow.add_node("critique", critique_node)
 
 workflow.set_entry_point("analyst")
+
 workflow.add_edge("analyst", "human_review")
-workflow.add_conditional_edges(
-    "human_review",
-    route_after_review,
-    {"analyst": "analyst", "story_architect": "story_architect"}
-)
+workflow.add_conditional_edges("human_review", route_after_review, {"analyst": "analyst", "story_architect": "story_architect"})
+
 workflow.add_edge("story_architect", "critique")
-
-def should_continue(state):
-    if state["next_step"] == "retry":
-        return "story_architect"
-    return END
-
-workflow.add_conditional_edges("critique", should_continue, {"story_architect": "story_architect", END: END})
+# FIX: This was missing! Now it checks feedback before ending.
+workflow.add_conditional_edges("critique", route_after_critique, {"story_architect": "story_architect", END: END})
 
 memory = MemorySaver()
-
-# FINAL SETTING: Pauses before Human Review (to revise analyst) AND before Critique (to revise slides)
 app = workflow.compile(checkpointer=memory, interrupt_before=["human_review", "critique"])
