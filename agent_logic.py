@@ -32,10 +32,17 @@ llm = ChatOpenAI(
 # --- NODE 1: THE ANALYST ---
 def analyst_node(state: AgentState):
     print("\n--- [1] ANALYST WORKING ---")
+    feedback = state.get('human_feedback', '')
+    
     combined_input = f"""
     USER GOAL: {state.get('user_request')}
     AVAILABLE FILE DATA: {state.get('raw_files_content')}
     """
+    
+    feedback_instruction = ""
+    if feedback and feedback != "Proceed with this strategy.":
+        feedback_instruction = f"\n\nIMPORTANT USER FEEDBACK TO INCORPORATE: {feedback}"
+    
     prompt = f"""
     You are a Senior Strategy Consultant. Analyze the User Goal and File Data.
     YOUR TASK:
@@ -43,13 +50,30 @@ def analyst_node(state: AgentState):
     2. GAPS: What is missing?
     3. RECOMMENDATION: Propose a clear narrative arc.
     Data Context: {combined_input}
+    {feedback_instruction}
     Keep it concise.
     """
     response = llm.invoke([
         SystemMessage(content="You are a strategic advisor."),
         HumanMessage(content=prompt)
     ])
-    return {"analysis_report": response.content}
+    return {"analysis_report": response.content, "human_feedback": None}
+
+
+# --- NODE: HUMAN REVIEW (routing checkpoint) ---
+def human_review_node(state: AgentState):
+    """Passthrough node that allows the graph to pause for human feedback."""
+    print("\n--- [HUMAN REVIEW] Waiting for user input ---")
+    return {}
+
+
+def route_after_review(state: AgentState):
+    """Route based on human feedback: revise analyst or proceed to story architect."""
+    feedback = state.get('human_feedback', '')
+    if not feedback or feedback.strip() == "" or feedback == "Proceed with this strategy.":
+        return "story_architect"
+    # If there's substantive feedback at this stage, re-run analyst with the feedback
+    return "analyst"
 
 # --- NODE 2: THE STORY ARCHITECT ---
 def story_node(state: AgentState):
@@ -121,11 +145,17 @@ def critique_node(state: AgentState):
 # --- BUILD WORKFLOW ---
 workflow = StateGraph(AgentState)
 workflow.add_node("analyst", analyst_node)
+workflow.add_node("human_review", human_review_node)
 workflow.add_node("story_architect", story_node)
 workflow.add_node("critique", critique_node)
 
 workflow.set_entry_point("analyst")
-workflow.add_edge("analyst", "story_architect")
+workflow.add_edge("analyst", "human_review")
+workflow.add_conditional_edges(
+    "human_review",
+    route_after_review,
+    {"analyst": "analyst", "story_architect": "story_architect"}
+)
 workflow.add_edge("story_architect", "critique")
 
 def should_continue(state):
@@ -137,5 +167,5 @@ workflow.add_conditional_edges("critique", should_continue, {"story_architect": 
 
 memory = MemorySaver()
 
-# FINAL SETTING: Pauses before Story Architect AND before Critique
-app = workflow.compile(checkpointer=memory, interrupt_before=["story_architect", "critique"])
+# FINAL SETTING: Pauses before Human Review (to revise analyst) AND before Critique (to revise slides)
+app = workflow.compile(checkpointer=memory, interrupt_before=["human_review", "critique"])

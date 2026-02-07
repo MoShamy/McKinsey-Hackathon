@@ -75,6 +75,7 @@ with left:
         append_chat("user", user_request)
         append_chat("assistant", "Analyzing inputs. Review the analyst report on the right.")
         run_until_pause(st.session_state.inputs)
+        st.rerun()
 
     snapshot = st.session_state.snapshot
     next_step = None
@@ -82,8 +83,16 @@ with left:
         next_step = snapshot.next[0]
 
     if snapshot and next_step:
-        st.subheader("Continue")
-        feedback = st.text_area("Feedback", placeholder="Press Continue to approve, or add changes.")
+        if next_step == "human_review":
+            st.subheader("Review Analyst Report")
+            st.caption("Add feedback to revise the analysis, or approve to proceed to slide creation.")
+        elif next_step == "critique":
+            st.subheader("Review Slide Plan")
+            st.caption("Add feedback to revise the slides, or approve to finalize.")
+        else:
+            st.subheader("Continue")
+        
+        feedback = st.text_area("Feedback", placeholder="Press Continue to approve, or type changes.")
         if st.button("Continue workflow"):
             if feedback.strip() == "":
                 feedback = "Proceed with this strategy."
@@ -93,6 +102,7 @@ with left:
             )
             append_chat("assistant", f"Feedback recorded: {feedback}")
             run_until_pause(None)
+            st.rerun()
 
     if snapshot and not snapshot.next:
         st.subheader("Export")
