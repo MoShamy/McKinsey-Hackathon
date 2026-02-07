@@ -15,58 +15,57 @@ Instead of a single "make me a deck" prompt, we use a **LangGraph-powered multi-
 
 ### Our Solution: A Stateful Multi‑Agent Storytelling System
 
-We design the system as a **stateful LangGraph DAG** rather than a simple linear chain:
+We implement the system as a **stateful LangGraph workflow** with explicit pause points for human-in-the-loop (HITL) control:
 
-- **The Brain (Shared State)**:  
-  A central dictionary that holds uploaded content, analysis results, slide plans, critiques, human decisions, and user feedback as the conversation progresses.
+- **Shared state (`AgentState`)**:  
+  A single state object holds: `raw_files_content`, `user_request`, `analysis_report`, `narrative_plan`, `human_feedback`, and `next_step`. The application updates `human_feedback` when the user approves or requests changes, then resumes the graph.
 
-- **Nodes (Agents) in the Graph**:
-  - **Analyst**: Reads multi-format inputs (e.g., PDFs, Office docs, CSV/Excel, notes, screenshots/images\*) and extracts the *strategic insight* and context.  
-    \*Videos are considered future work / stretch goal.
-  - **Human_Review**: Pauses the graph, surfaces the analysis, and waits for **user approval / edits**.
-  - **Story_Architect**: Designs the narrative arc and slide-by-slide flow.
-  - **Critique**: Evaluates narrative quality; can **reject and loop back** to Story_Architect if the story is weak or generic.
-  - **Executor**: Maps the final approved JSON story into a native, on‑brand `.pptx` using `python-pptx`, driven by a **user-provided template** (single or multiple layouts/backgrounds).
+- **Nodes in the graph**:
+  - **Analyst**: Consumes `user_request` and `raw_files_content` (and optional `human_feedback` when re-run). Produces an **analysis report** (Core Strategy, Gaps, Recommendation)—no slides.
+  - **Human_Review**: A passthrough node; the graph **interrupts before** it so the app can show the Analyst report and collect user approval or feedback.
+  - **Story_Architect**: Consumes the approved `analysis_report` and any `human_feedback`. Produces a **narrative plan** (JSON: list of slides with `title`, `bullets`, `speaker_notes`).
+  - **Critique**: Validates the narrative plan (e.g., JSON sanity, whether user feedback was addressed). Sets `next_step` to `"retry"` (loop back to Story_Architect) or continues to **END**. The graph **interrupts before** Critique so the user can review the slide plan and optionally add feedback.
+  - **Executor** (outside the graph): After the workflow reaches END, the **application** calls `create_ppt.generate_pptx(narrative_plan)` to produce a native `.pptx` file. Currently uses the default `python-pptx` layout; support for a user-provided template is a natural extension.
 
-The result is a **conversation → confirm → execute → critique → loop** flow that feels like working with a junior consultant who can both think and produce.
+The result is a **run → pause (review analysis) → run → pause (review slides) → run → optional retry or end → export PPTX** flow.
 
-### Detailed Agent Roles
+### Detailed Agent Roles (As Implemented)
 
-- **Analyst (Strategist)**
-  - **Input**: Raw documents (CSVs, PDFs, notes, emails, Office docs, and images where supported) + target audience (e.g., CEO vs. BU lead).
-  - **Task**: Identify the *Big Idea*, key problems, levers, and recommended actions. Choose an appropriate narrative pattern (e.g., *Situation → Complication → Resolution*, *Problem → Agitation → Solution*, or *What → So What? → Now What?*).
-  - **Output**: A **strategic brief (JSON)** capturing audience (with emphasis on executive needs), objective, narrative arc, key messages, and supporting data references.
-  - **Human-in-the-loop expectation**: Analyst output is always surfaced for review; nothing proceeds to slides without explicit human approval.
+- **Analyst** (`agent_logic.analyst_node`)
+  - **Input**: `user_request`, `raw_files_content`; on re-runs, `human_feedback` is appended so the Analyst can revise.
+  - **Task**: Act as a Senior Strategy Consultant. Output: (1) Core Strategy, (2) Gaps (what's missing), (3) Recommendation (narrative arc). Kept concise.
+  - **Output**: `analysis_report` (plain text). `human_feedback` is cleared after use so the next pause can collect fresh input.
+  - **HITL**: Workflow **interrupts before** `human_review`. The app shows the report and asks the user to approve ("Proceed with this strategy") or type feedback; feedback sends the graph back to the Analyst.
 
-- **Story_Architect (Storyboarder)**
-  - **Input**: Strategic brief from Analyst (once approved by Human_Review).
-  - **Task**: Decide slide order and purpose; for each slide, define title, key message, and why this slide exists in the story, optimized for an **executive audience** (concise, decision-oriented).
-  - **Output**: **JSON slide plan** – a list of slides with titles, objectives, and reasoning for inclusion.
-  - **Human-in-the-loop expectation**: User can accept, reorder, or reject the proposed narrative; rejections trigger a re-run with updated constraints (e.g., “shorter deck”, “more aggressive tone”, “focus on risks”).
+- **Human_Review** (`agent_logic.human_review_node`)
+  - **Role**: Passthrough node; the graph **interrupts before** this node so the application can display state and prompt the user. No LLM call inside this node.
+  - **Routing** (`route_after_review`): If `human_feedback` is empty or "Proceed with this strategy." → go to **Story_Architect**. Otherwise → go back to **Analyst** to incorporate feedback.
 
-- **Critique**
-  - **Input**: Slide plan and (optionally) draft content.
-  - **Task**: Act as a critical manager. Flag generic content, missing tension, weak "so what", or inconsistent data.  
-  - **Behavior**: If quality is low, it **rejects** the draft and routes control back to Story_Architect with explicit improvement instructions.
-  - **Human-in-the-loop expectation**: Critique rationales are displayed to the user so they can understand **why** the system changed the story before slides are regenerated.
+- **Story_Architect** (`agent_logic.story_node`)
+  - **Input**: `analysis_report` and `human_feedback` (e.g., "Make it more aggressive", "Focus on risks").
+  - **Task**: Create a 3-slide presentation plan; output **only** valid JSON.
+  - **Output**: `narrative_plan` — a dict with key `"slides"`: list of `{ "title", "bullets", "speaker_notes" }`. If JSON parsing fails, a safe fallback structure is returned.
+  - **HITL**: After Story_Architect runs, the graph **interrupts before** Critique. The app shows the slide plan; the user can approve or add feedback. That feedback is what Critique uses to decide if the slides "completely solve" the user's complaint (e.g., “shorter deck”, “more aggressive tone”, “focus on risks”).
 
-- **Executor**
-  - **Input**: Final, approved JSON story (slides + bullets + speaker notes) and a **user-supplied branded `.pptx` template** (single background or collection of layouts).
-  - **Task**: Fill the template placeholders with titles, bullets, charts placeholders, and rich speaker notes while **strictly respecting template fonts, colors, and layout**.
-  - **Output**: A real, fully editable PowerPoint file (`.pptx`) suitable for client delivery.
-  - **Human-in-the-loop expectation**: User can download, inspect, and overwrite in PowerPoint; future iterations can re-use the same template with revised narratives.
+- **Critique** (`agent_logic.critique_node`)
+  - **Input**: `narrative_plan`, `human_feedback`.
+  - **Behavior**: (1) **Fail-safe**: If no slides or first slide title is "Error", set `next_step = "retry"` and re-invoke Story_Architect. (2) **User feedback check**: If the user gave substantive feedback, an LLM validates whether the slides addressed it; if the LLM says **REJECT**, set `next_step = "retry"` and pass the reason back as `human_feedback`. (3) Otherwise set `next_step = "proceed"` and continue to END.
+  - **HITL**: The user sees the slide plan at the pause *before* Critique and can type feedback; that feedback is what Critique uses for the REJECT/APPROVE check.
 
-- **Human_Review (Human-in-the-Loop)**
-  - **Input**: Analyst output, Story_Architect plans, and/or Critique comments.
-  - **Task**: Let the user:  
-    - Approve or edit the strategic brief  
-    - Change constraints (e.g., "Audience is now CEO", "Make tone more aggressive")  
-    - Trigger a re-run of downstream agents with updated context  
+- **Executor** (`create_ppt.generate_pptx`)
+  - **Invocation**: Not a graph node. Called by `main.py` or `streamlit_app.py` after the workflow reaches END and the user triggers export.
+  - **Input**: `narrative_plan` (JSON with `slides`: title, bullets, speaker_notes), and optional filename (default `Strategy_Deck.pptx`).
+  - **Task**: Create a `Presentation()`, add one slide per item using `slide_layouts[1]`, set title, bullets, and speaker notes. Save to disk.
+  - **Output**: A native, editable `.pptx` file. User-provided template support is a planned extension.  
 
-### Orchestrator & Control Logic
+### Orchestrator & Control Logic (As Implemented)
 
-On top of individual agents, we use an **Orchestrator** implemented via LangGraph routing logic:
+Routing is implemented with two **conditional edges** in `agent_logic.py`:
 
+- **After Human_Review** (`route_after_review`): Reads `human_feedback`. If empty or "Proceed with this strategy." → **Story_Architect**; else → **Analyst**.
+- **After Critique** (`should_continue`): Reads `next_step`. If "retry" → **Story_Architect**; else → **END** (app then offers Generate PPTX).
+
+Legacy description (conceptually accurate; implementation is the two edges above):
 - **Role**: Decide which agent to call next based on:
   - Current state (what has been computed so far).
   - Human_Review decisions (approve / edit / reject).
@@ -78,40 +77,49 @@ On top of individual agents, we use an **Orchestrator** implemented via LangGrap
 
 This makes the system feel like a **controlled, agentic partner**: autonomous enough to plan and self-correct, but always steered by explicit human decisions at key checkpoints.
 
-### Architecture: LangGraph State Machine
+### Architecture: LangGraph State Machine (As Implemented)
 
-We use **LangGraph** to model the system as a **state graph** with controlled loops and pauses:
+- **State** (`AgentState` in `agent_logic.py`): `raw_files_content`, `user_request`, `analysis_report`, `narrative_plan`, `human_feedback`, `next_step`. All optional except the first two (provided at entry).
 
-- **State**: A Python dict containing:
-  - `raw_inputs` (docs, CSVs, notes)
-  - `strategic_brief`
-  - `slide_plan`
-  - `draft_slides`
-  - `critiques`
-  - `user_feedback`
+- **Graph structure**:
+  1. **Entry** → **Analyst**.
+  2. **Analyst** → **Human_Review** (edge).
+  3. **Human_Review** → conditional: **Analyst** (if user gave feedback) or **Story_Architect** (if user approved).
+  4. **Story_Architect** → **Critique** (edge).
+  5. **Critique** → conditional: **Story_Architect** (if `next_step == "retry"`) or **END**.
 
-- **Graph Flow (High level)**:
-  1. `Analyst` → writes `strategic_brief`.
-  2. `Human_Review` → user approves/edits or re-asks.
-  3. `Story_Architect` → creates `slide_plan`.
-  4. `Critique`:
-     - If **failed**: add critique to state, route back to `Story_Architect`.
-     - If **passed**: continue.
-  5. `Executor` → generates `.pptx` from final JSON + template.
+- **Interrupts**: The compiled graph uses `interrupt_before=["human_review", "critique"]`. So execution stops *before* Human_Review (after Analyst) and *before* Critique (after Story_Architect). The driver (`main.py` or `streamlit_app.py`) calls `app.get_state(config)` to see which step is next, displays the relevant state to the user, collects `human_feedback`, calls `app.update_state(config, {"human_feedback": ...})`, then streams again with `app.stream(None, config)` to resume.
 
-This graph-based design gives us:
+- **Executor**: Not in the graph. When the graph reaches END, the app calls `create_ppt.generate_pptx(snapshot.values["narrative_plan"], filename=...)` to write the `.pptx` file.
 
-- **Loops** (e.g., Critique → Story_Architect) without hacking prompt logic.
-- **Pauses** (Human_Review) waiting for user confirmation.
-- **Traceability**: Every intermediate state can be logged and shown in the demo.
+### System Workflow (End-to-End)
+
+1. **User provides input**: A **user goal** (e.g., "I need a deck for the Board explaining why we missed Q3 targets") and **source content**. In the Streamlit app, content comes from uploaded files (PDF, CSV, XLSX, XLS, TXT, MD) plus optional notes; in the CLI (`main.py`) it can be inline text.
+2. **Run to first interrupt**: The graph runs from **Analyst** → **Human_Review** and then **pauses** (because of `interrupt_before=["human_review", "critique"]`). The app shows the **Analyst report** and a feedback box.
+3. **User at Human_Review**: User either approves (e.g., press Enter or type "Proceed with this strategy.") or types changes (e.g., "Focus on risks", "Audience is CEO"). The app calls `app.update_state(..., {"human_feedback": ...})` and resumes the graph. Routing sends execution either back to **Analyst** (if there was feedback) or to **Story_Architect** (if approved).
+4. **Run to second interrupt**: **Story_Architect** produces `narrative_plan` (JSON slides). The graph then **pauses before Critique**. The app shows the **slide plan** (titles, bullets, speaker notes) and again asks for approval or feedback.
+5. **User at Critique gate**: User approves or gives feedback. The app updates state and resumes. **Critique** runs: it may **REJECT** (e.g., slides did not address feedback or JSON failed) and set `next_step = "retry"`, sending the graph back to **Story_Architect**, or it sets `next_step = "proceed"` and the graph reaches **END**.
+6. **Export**: When the graph has ended, the app shows an option to **Generate PPTX**. On click, it calls `create_ppt.generate_pptx(narrative_plan, filename="Final_Deck.pptx")`. The user can then download the file (Streamlit) or find it on disk (CLI).
+
+### Repository Structure
+
+| File / folder | Purpose |
+|---------------|---------|
+| `agent_logic.py` | Defines `AgentState`, LLM, and all graph nodes (Analyst, Human_Review, Story_Architect, Critique); builds the LangGraph workflow with conditional edges and `interrupt_before`; exports compiled `app` with `MemorySaver` checkpointer. |
+| `create_ppt.py` | `generate_pptx(json_data, filename)` — builds a `python-pptx` presentation from the `narrative_plan` JSON (title, bullets, speaker notes per slide) and saves to disk. |
+| `main.py` | CLI driver: sets initial `user_request` and `raw_files_content`, runs `app.stream()` in a loop, handles interrupts by printing state and reading user input from stdin, updates `human_feedback`, and calls `generate_pptx` when the workflow ends. |
+| `streamlit_app.py` | Web UI: file upload (PDF, CSV, XLSX, XLS, TXT, MD), user goal and notes, run-until-pause logic, feedback form at each interrupt, and Export / Download PPTX when done. Displays Analyst report and Narrative plan in expanders. |
+| `data/sample_input/` | Sample inputs for testing (e.g., GCC real estate market research, business plan, metrics CSV, internal email). |
+| `.env` | `OPENAI_API_KEY` and optionally `OPENAI_API_BASE` for the LLM (see Quickstart). |
 
 ### Tech Stack
 
 - **Language**: Python
-- **Orchestration**: LangGraph (on top of LangChain)
-- **Models**: High-reasoning LLM (e.g., GPT‑4o, Claude 3.5 Sonnet)
-- **Presentation Engine**: `python-pptx` with a corporate `.pptx` template
-- **Inputs**: PDFs, notes, emails, screenshots/images (where supported), and structured data (e.g., CSV/Excel). Video understanding is considered out-of-scope for the current prototype but is a natural extension.
+- **Orchestration**: LangGraph (on top of LangChain); state checkpointing via `MemorySaver`
+- **LLM**: OpenAI-compatible API (`ChatOpenAI` from `langchain_openai`); model `gpt-4`; configurable via `OPENAI_API_KEY` and `OPENAI_API_BASE` in `.env`
+- **Presentation**: `python-pptx`; `create_ppt.generate_pptx` uses the default blank presentation and `slide_layouts[1]` per slide (user template support is a planned extension)
+- **UI**: **Streamlit** (`streamlit_app.py`) for web; **CLI** (`main.py`) for terminal-driven runs
+- **Inputs**: In Streamlit, supported file types are **PDF** (pypdf), **CSV**, **XLSX/XLS** (pandas, openpyxl), **TXT**, **MD**. Content is concatenated into `raw_files_content` and optionally truncated for context limits.
 
 ### Agentic & Business Metrics
 
@@ -165,44 +173,42 @@ We align system behavior with metrics that matter both technically and for consu
 | Output Usability  | Fully native, editable `.pptx`    | Executor                      |
 | User Latency      | \< 1 minute per interaction step  | Orchestrator (LangGraph)      |
 
-### Quickstart (Prototype)
+### Quickstart
 
-> Note: Commands and filenames below reflect the intended prototype structure. Adjust as the implementation evolves.
-
-1. **Clone the repository**
+1. **Clone and install**
 
    ```bash
-   git clone &lt;REPO_URL&gt;
+   git clone <REPO_URL>
    cd McKinsey-Hackathon
-   ```
-
-2. **Create environment & install dependencies**
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
-3. **Set API keys**
+2. **Configure environment**
+
+   Create a `.env` file in the project root (or export variables):
 
    ```bash
-   export OPENAI_API_KEY=&lt;your_key&gt;      # or ANTHROPIC_API_KEY, depending on provider
+   OPENAI_API_KEY=your_openai_api_key
+   OPENAI_API_BASE=https://api.openai.com/v1   # optional; omit for default OpenAI
    ```
 
-4. **Place a corporate PowerPoint template**
+3. **Run the app**
 
-   - Add your branded `.pptx` template to the `templates/` folder, e.g.:
-     - `templates/corporate_mckinsey_style.pptx`
-
-5. **Run the generator (example CLI)**
+   **Web UI (recommended):**
 
    ```bash
-   python generator.py \
-     --input data/sample_input/ \
-     --template templates/corporate_mckinsey_style.pptx \
-     --output output/executive_story_deck.pptx
+   streamlit run streamlit_app.py
    ```
+
+   Then open the URL shown in the terminal. Use "User goal" and "Upload source files" (PDF, CSV, XLSX, TXT, MD, etc.), click "Start analysis", and follow the prompts to review the Analyst report and slide plan. When the workflow finishes, click "Generate PPTX" and "Download PPTX".
+
+   **CLI (interactive):**
+
+   ```bash
+   python main.py
+   ```
+
+   Edit the `user_chat` and `file_content` variables at the top of `main.py` to change the scenario, or wire in file reading. The script will pause after the Analyst and after the Story_Architect; type your feedback or press Enter to approve. When done, the deck is written as `Final_Deck.pptx` in the current directory.
 
 ### Demo Script for Judges
 
