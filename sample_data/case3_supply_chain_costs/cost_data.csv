@@ -1,0 +1,11 @@
+pillar,initiative,savings_annual_usd_m,timeline,owner,risk_notes
+Freight,ocean_air_contract_reneg,2.5,Q3_signed,Logistics,carrier pushback
+Freight,mode_shift_air_to_ocean,2.0,Q4_live,Planning,lead time constraints
+Warehousing,EU_DC_consolidation,1.75,Q4_rollout,Ops,pilot dependency
+Warehousing,US_East_evaluation,1.5,mid_year_decision,Ops,TBD
+Sourcing,dual_source_top5,3.0,Q2_3_of_5_qualified,Procurement,qualification delay
+Sourcing,packaging_standardisation,0.75,Q3,Procurement,product alignment
+Inventory,forecast_tool_safety_stock,2.0,18mo_ramp,Planning,tool rollout
+Inventory,write_down_rationalisation,1.0,Q3_one_time,Planning,PandL hit in quarter
+Total,,14.5,,,
+One_time_costs,capex_restructuring,2.5,FY24_25,Finance,payback under 12mo
